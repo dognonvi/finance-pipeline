@@ -1,0 +1,21 @@
+finance_pipeline:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth                      # utilise gcloud auth application-default
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: dev_finance
+      threads: 4
+      timeout_seconds: 300
+      location: US
+
+    prod:
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      keyfile: "{{ env_var('GCP_KEYFILE_PATH') }}"
+      dataset: prod_finance
+      threads: 4
+      timeout_seconds: 300
+      location: US

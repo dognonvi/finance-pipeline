@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: mart_customer_kpis
+    description: "KPIs financiers agrégés par client — table finale pour Looker Studio"
+    columns:
+      - name: customer_id
+        description: "Identifiant unique du client"
+        tests:
+          - unique
+          - not_null
+
+      - name: total_transactions
+        description: "Nombre total de transactions du client"
+        tests:
+          - not_null
+
+      - name: success_rate_pct
+        description: "Taux de succès des transactions en pourcentage"
+        tests:
+          - not_null
+
+      - name: total_amount_eur
+        description: "Montant total transacté en EUR"
+        tests:
+          - not_null
+
+  - name: mart_daily_kpis
+    description: "KPIs financiers agrégés par jour et catégorie — vue tendances"
+    columns:
+      - name: transaction_date
+        description: "Date de la transaction"
+        tests:
+          - not_null
+
+      - name: category
+        description: "Catégorie de transaction"
+        tests:
+          - not_null
+
+      - name: daily_success_rate_pct
+        description: "Taux de succès journalier en pourcentage"
+        tests:
+          - not_null

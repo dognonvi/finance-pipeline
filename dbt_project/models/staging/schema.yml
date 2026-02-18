@@ -1,0 +1,50 @@
+version: 2
+
+# ─── SOURCE (table raw chargée par le script d'ingestion) ───────────────────
+sources:
+  - name: raw
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
+    schema: raw
+    tables:
+      - name: transactions
+        description: "Transactions financières brutes chargées depuis GCS"
+
+# ─── MODEL STAGING ──────────────────────────────────────────────────────────
+models:
+  - name: stg_transactions
+    description: "Transactions nettoyées et typées — couche staging"
+    columns:
+      - name: transaction_id
+        description: "Identifiant unique de la transaction"
+        tests:
+          - unique
+          - not_null
+
+      - name: customer_id
+        description: "Identifiant du client"
+        tests:
+          - not_null
+
+      - name: transaction_date
+        description: "Date de la transaction"
+        tests:
+          - not_null
+
+      - name: amount
+        description: "Montant de la transaction en EUR"
+        tests:
+          - not_null
+
+      - name: status
+        description: "Statut de la transaction"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['SUCCESS', 'FAILED', 'PENDING']
+
+      - name: category
+        description: "Catégorie de la transaction"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['SHOPPING', 'TRANSFER', 'FOOD', 'WITHDRAWAL']

@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+
+# DBT
+target/
+dbt_packages/
+logs/
+
+# GCP credentials — JAMAIS committer les clés !
+*.json
+service-account*.json
+
+# OS
+.DS_Store

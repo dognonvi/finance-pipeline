@@ -1,0 +1,127 @@
+// Jenkinsfile
+// ─────────────────────────────────────────────────────────────────────────────
+// Pipeline CI/CD pour le Finance Data Pipeline
+// Etapes : Lint → Test DBT → Run DBT → Deploy (prod uniquement sur main)
+// ─────────────────────────────────────────────────────────────────────────────
+
+pipeline {
+
+    agent any
+
+    // Variables d'environnement — configurées dans Jenkins Credentials
+    environment {
+        GCP_PROJECT_ID  = credentials('gcp-project-id')
+        GCP_KEYFILE     = credentials('gcp-service-account-key')
+        DBT_PROFILES_DIR = "${WORKSPACE}/dbt_project"
+    }
+
+    stages {
+
+        // ── ETAPE 1 : Récupération du code ──────────────────────────────────
+        stage('Checkout') {
+            steps {
+                checkout scm
+                echo "Code récupéré depuis : ${env.GIT_BRANCH}"
+            }
+        }
+
+        // ── ETAPE 2 : Installation des dépendances ──────────────────────────
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                    pip install --upgrade pip
+                    pip install dbt-bigquery google-cloud-storage google-cloud-bigquery
+                    dbt --version
+                '''
+            }
+        }
+
+        // ── ETAPE 3 : Ingestion des données brutes → GCS → BigQuery ─────────
+        stage('Ingestion') {
+            steps {
+                withCredentials([file(credentialsId: 'gcp-service-account-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                    sh '''
+                        echo "=== Ingestion CSV → GCS → BigQuery ==="
+                        python ingestion/upload_to_gcs_bq.py
+                    '''
+                }
+            }
+        }
+
+        // ── ETAPE 4 : DBT Debug (vérifie la connexion BigQuery) ─────────────
+        stage('DBT Debug') {
+            steps {
+                dir('dbt_project') {
+                    sh 'dbt debug --profiles-dir . --target dev'
+                }
+            }
+        }
+
+        // ── ETAPE 5 : DBT Test sur les sources ──────────────────────────────
+        stage('DBT Source Tests') {
+            steps {
+                dir('dbt_project') {
+                    sh 'dbt test --profiles-dir . --target dev --select source:*'
+                }
+            }
+        }
+
+        // ── ETAPE 6 : DBT Run (staging + marts) ─────────────────────────────
+        stage('DBT Run') {
+            steps {
+                dir('dbt_project') {
+                    sh '''
+                        echo "=== Run staging ==="
+                        dbt run --profiles-dir . --target dev --select staging.*
+
+                        echo "=== Run marts ==="
+                        dbt run --profiles-dir . --target dev --select marts.*
+                    '''
+                }
+            }
+        }
+
+        // ── ETAPE 7 : DBT Test (modèles) ────────────────────────────────────
+        stage('DBT Model Tests') {
+            steps {
+                dir('dbt_project') {
+                    sh 'dbt test --profiles-dir . --target dev --select staging.* marts.*'
+                }
+            }
+        }
+
+        // ── ETAPE 8 : Deploy PROD (uniquement sur branche main) ─────────────
+        stage('Deploy to Production') {
+            when {
+                branch 'main'
+            }
+            steps {
+                dir('dbt_project') {
+                    sh '''
+                        echo "=== DEPLOY PRODUCTION ==="
+                        dbt run  --profiles-dir . --target prod --select staging.* marts.*
+                        dbt test --profiles-dir . --target prod --select staging.* marts.*
+                        echo "=== PRODUCTION OK ==="
+                    '''
+                }
+            }
+        }
+
+    }
+
+    // ── POST : Notifications ─────────────────────────────────────────────────
+    post {
+        success {
+            echo "Pipeline terminé avec succès sur ${env.GIT_BRANCH}"
+            // emailext body: "Pipeline OK", subject: "Finance Pipeline SUCCESS", to: "vince.dognon@gmail.com"
+        }
+        failure {
+            echo "Pipeline en échec — vérifier les logs Jenkins"
+            // emailext body: "Pipeline FAILED", subject: "Finance Pipeline FAILURE", to: "vince.dognon@gmail.com"
+        }
+        always {
+            cleanWs()  // Nettoyage du workspace Jenkins après chaque build
+        }
+    }
+
+}
