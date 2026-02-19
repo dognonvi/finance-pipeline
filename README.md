@@ -162,3 +162,5 @@ Connecter Looker Studio aux tables BigQuery :
 
 **Vincent Dognon** — Data Engineer | GCP Certified × 3  
 vince.dognon@gmail.com | [LinkedIn](https://linkedin.com/in/vincent-dognon)
+
+## 🚀 CI/CD via GitHub Actions
