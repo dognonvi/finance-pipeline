@@ -14,7 +14,7 @@ finance_pipeline:
       type: bigquery
       method: service-account
       project: "{{ env_var('GCP_PROJECT_ID') }}"
-      keyfile: "{{ env_var('GCP_SA_KEY') }}"
+      keyfile: "{{ env_var('GCP_SA_KEY_JSON') }}"
       dataset: prod_finance
       threads: 4
       timeout_seconds: 300
