@@ -11,37 +11,74 @@ env:
   GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
 
 jobs:
-  pipeline:
+
+  # ── JOB 1 : Ingestion + DBT DEV (toutes branches) ─────────────────────────
+  pipeline-dev:
+    name: "Ingestion + DBT Run & Test (dev)"
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: "📥 Checkout code"
         uses: actions/checkout@v3
 
-      - name: Setup Python
+      - name: "🐍 Setup Python"
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: "📦 Install dependencies"
         run: pip install -r requirements.txt
 
-      - name: Authenticate to GCP
+      - name: "🔑 Authenticate to GCP"
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Run Ingestion
+      - name: "🪣 Run Ingestion (CSV → GCS → BigQuery)"
         run: python ingestion/upload_to_gcs_bq.py
 
-      - name: DBT Debug
+      - name: "🔍 DBT Debug"
         working-directory: dbt_project
         run: dbt debug --profiles-dir .
 
-      - name: DBT Run
+      - name: "▶️ DBT Run (dev)"
         working-directory: dbt_project
-        run: dbt run --profiles-dir .
+        run: dbt run --profiles-dir . --target dev
 
-      - name: DBT Test
+      - name: "🧪 DBT Test (dev)"
         working-directory: dbt_project
-        run: dbt test --profiles-dir .
+        run: dbt test --profiles-dir . --target dev
+
+  # ── JOB 2 : Deploy PROD (main uniquement) ─────────────────────────────────
+  pipeline-prod:
+    name: "Deploy Production (main only)"
+    runs-on: ubuntu-latest
+    needs: pipeline-dev
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    env:
+      GCP_SA_KEY_JSON: ${{ secrets.GCP_SA_KEY_JSON }}
+
+    steps:
+      - name: "📥 Checkout code"
+        uses: actions/checkout@v3
+
+      - name: "🐍 Setup Python"
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: "📦 Install dependencies"
+        run: pip install -r requirements.txt
+
+      - name: "🔑 Authenticate to GCP"
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: "▶️ DBT Run PROD"
+        working-directory: dbt_project
+        run: dbt run --profiles-dir . --target prod
+
+      - name: "🧪 DBT Test PROD"
+        working-directory: dbt_project
+        run: dbt test --profiles-dir . --target prod
