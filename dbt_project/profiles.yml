@@ -3,7 +3,7 @@ finance_pipeline:
   outputs:
     dev:
       type: bigquery
-      method: oauth                      # utilise gcloud auth application-default
+      method: oauth
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       dataset: dev_finance
       threads: 4
@@ -12,7 +12,7 @@ finance_pipeline:
 
     prod:
       type: bigquery
-      method: service-account
+      method: oauth
       project: "{{ env_var('GCP_PROJECT_ID') }}"
       dataset: prod_finance
       threads: 4
