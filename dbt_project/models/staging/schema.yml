@@ -40,11 +40,15 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['SUCCESS', 'FAILED', 'PENDING']
+              config:
+                label: "Statut de la transaction"
+                values: ['SUCCESS', 'FAILED', 'PENDING']
 
       - name: category
         description: "Catégorie de la transaction"
         tests:
           - not_null
           - accepted_values:
-              values: ['SHOPPING', 'TRANSFER', 'FOOD', 'WITHDRAWAL']
+              config:
+                label: "Catégorie de la transaction"
+                values: ['SHOPPING', 'TRANSFER', 'FOOD', 'WITHDRAWAL']
