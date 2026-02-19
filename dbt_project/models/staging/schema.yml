@@ -1,6 +1,5 @@
 version: 2
 
-# ─── SOURCE (table raw chargée par le script d'ingestion) ───────────────────
 sources:
   - name: raw
     database: "{{ env_var('GCP_PROJECT_ID') }}"
@@ -9,7 +8,6 @@ sources:
       - name: transactions
         description: "Transactions financières brutes chargées depuis GCS"
 
-# ─── MODEL STAGING ──────────────────────────────────────────────────────────
 models:
   - name: stg_transactions
     description: "Transactions nettoyées et typées — couche staging"
@@ -40,15 +38,11 @@ models:
         tests:
           - not_null
           - accepted_values:
-              config:
-                label: "Statut de la transaction"
-                values: ['SUCCESS', 'FAILED', 'PENDING']
+              values: ['SUCCESS', 'FAILED', 'PENDING']
 
       - name: category
         description: "Catégorie de la transaction"
         tests:
           - not_null
           - accepted_values:
-              config:
-                label: "Catégorie de la transaction"
-                values: ['SHOPPING', 'TRANSFER', 'FOOD', 'WITHDRAWAL']
+              values: ['SHOPPING', 'TRANSFER', 'FOOD', 'WITHDRAWAL']
