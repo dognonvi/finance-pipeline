@@ -1,7 +1,7 @@
-# 💰 Finance Data Pipeline — GCP + DBT + Jenkins
+# 💰 Finance Data Pipeline — GCP + DBT + GitHub Actions
 
 Pipeline de données financières cloud-native construit sur Google Cloud Platform,
-transformé avec DBT et déployé automatiquement via Jenkins CI/CD.
+transformé avec DBT et déployé automatiquement via GitHub Actions CI/CD.
 
 ---
 
@@ -19,18 +19,20 @@ transactions.csv
  BigQuery : raw.transactions
       │
       ▼
- DBT Staging : stg_transactions       ← nettoyage, typage, validation
+ DBT Staging : stg_transactions          ← nettoyage, typage, validation
       │
       ▼
  DBT Marts :
-  ├── mart_customer_kpis              ← KPIs par client
-  └── mart_daily_kpis                ← KPIs par jour & catégorie
+  ├── mart_customer_kpis                 ← KPIs agrégés par client
+  └── mart_daily_kpis                   ← KPIs par jour & catégorie
       │
       ▼
- Looker Studio Dashboard             ← visualisation & reporting
+ Looker Studio Dashboard                ← visualisation & reporting
       ▲
       │
- Jenkins CI/CD                       ← lint → test → run → deploy prod
+ GitHub Actions CI/CD
+  ├── pipeline-dev  (branches dev & main)  ← ingestion + dbt run/test
+  └── pipeline-prod (branche main only)    ← deploy prod_finance
 ```
 
 ---
@@ -39,26 +41,32 @@ transactions.csv
 
 ```
 finance_pipeline/
+├── .github/
+│   └── workflows/
+│       └── pipeline.yml          # CI/CD GitHub Actions (dev + prod)
+│
 ├── ingestion/
-│   ├── transactions.csv          # Données sources (simulées)
-│   └── upload_to_gcs_bq.py      # Script d'ingestion GCS → BigQuery
+│   ├── transactions.csv          # Données financières simulées (15 transactions)
+│   └── upload_to_gcs_bq.py      # Script ingestion CSV → GCS → BigQuery
 │
 ├── dbt_project/
-│   ├── dbt_project.yml           # Config DBT
-│   ├── profiles.yml              # Connexions dev / prod
+│   ├── dbt_project.yml           # Configuration DBT
+│   ├── profiles.yml              # Connexions BigQuery dev / prod (oauth)
 │   └── models/
 │       ├── staging/
-│       │   ├── stg_transactions.sql   # Nettoyage & typage
-│       │   └── schema.yml             # Tests & documentation
+│       │   ├── stg_transactions.sql   # Nettoyage & typage des données brutes
+│       │   └── schema.yml             # Tests qualité (unique, not_null, accepted_values)
 │       └── marts/
-│           ├── mart_customer_kpis.sql # KPIs par client
-│           ├── mart_daily_kpis.sql    # KPIs journaliers
-│           └── schema.yml             # Tests & documentation
+│           ├── mart_customer_kpis.sql # KPIs financiers par client
+│           ├── mart_daily_kpis.sql    # KPIs journaliers par catégorie
+│           └── schema.yml             # Tests qualité des marts
 │
 ├── jenkins/
-│   └── Jenkinsfile               # Pipeline CI/CD complet
+│   └── Jenkinsfile               # Pipeline Jenkins (documentation de référence)
 │
 ├── requirements.txt
+├── .env.example
+├── .gitignore
 └── README.md
 ```
 
@@ -66,48 +74,84 @@ finance_pipeline/
 
 ## ⚙️ Prérequis
 
-- Compte Google Cloud Platform avec facturation activée
-- Projet GCP créé et BigQuery API activée
-- Bucket GCS créé (ex: `finance-pipeline-raw`)
-- Python 3.9+
-- Jenkins installé (local ou VM)
-- `gcloud` CLI configuré
+- Compte Google Cloud Platform avec projet actif
+- BigQuery API et Cloud Storage API activées
+- Datasets BigQuery créés : `raw`, `dev_finance`, `prod_finance`
+- Bucket GCS créé
+- Python 3.12+
+- Compte GitHub avec Actions activé
 
 ---
 
-## 🚀 Démarrage rapide
+## 🚀 Démarrage rapide (local)
 
 ### 1. Cloner le projet
 ```bash
-git clone https://github.com/vincent-dognon/finance-pipeline.git
+git clone https://github.com/dognonvi/finance-pipeline.git
 cd finance_pipeline
+```
+
+### 2. Créer et activer le venv
+```bash
+python -m venv venv
+source venv/bin/activate   # Mac/Linux
 pip install -r requirements.txt
 ```
 
-### 2. Configurer les variables d'environnement
+### 3. Configurer les variables d'environnement
 ```bash
-export GCP_PROJECT_ID="votre-project-id"
-export GCS_BUCKET="finance-pipeline-raw"
-export GCP_KEYFILE_PATH="/chemin/vers/service-account.json"
+cp .env.example .env
+# Remplir les valeurs dans .env
 ```
 
-### 3. Lancer l'ingestion
+```bash
+# .env
+GCP_PROJECT_ID=votre-project-id
+GCS_BUCKET=votre-bucket-name
+GCP_KEYFILE_PATH=./service-account.json
+```
+
+### 4. Lancer l'ingestion
 ```bash
 python ingestion/upload_to_gcs_bq.py
 ```
 
-### 4. Lancer DBT
+### 5. Lancer DBT
 ```bash
 cd dbt_project
-dbt debug --profiles-dir .          # vérifie la connexion
-dbt run   --profiles-dir .          # exécute les modèles
-dbt test  --profiles-dir .          # lance les tests
+dbt debug --profiles-dir .    # vérifier la connexion
+dbt run   --profiles-dir .    # exécuter les modèles
+dbt test  --profiles-dir .    # lancer les tests
 ```
 
-### 5. Configurer Jenkins
-- Créer un pipeline Jenkins pointant sur ce repo
-- Ajouter les credentials : `gcp-project-id`, `gcp-service-account-key`
-- Chaque push déclenche automatiquement le pipeline
+---
+
+## 🔄 Pipeline GitHub Actions
+
+Le CI/CD se déclenche automatiquement à chaque `push` ou `pull_request`.
+
+### Workflow
+
+| Job | Déclencheur | Actions |
+|-----|-------------|---------|
+| `pipeline-dev` | Toutes branches | Ingestion → DBT debug → DBT run (dev) → DBT test (dev) |
+| `pipeline-prod` | Branche `main` uniquement | DBT run (prod) → DBT test (prod) |
+
+### Authentification GCP
+
+L'authentification GCP est gérée par `google-github-actions/auth@v1` — DBT utilise automatiquement les credentials via `method: oauth`. Un seul secret suffit.
+
+### Secrets GitHub à configurer
+
+```
+Settings → Secrets and variables → Actions
+```
+
+| Secret | Description |
+|--------|-------------|
+| `GCP_PROJECT_ID` | ID du projet GCP |
+| `GCS_BUCKET` | Nom du bucket GCS |
+| `GCP_SA_KEY` | Contenu JSON du service account |
 
 ---
 
@@ -116,51 +160,44 @@ dbt test  --profiles-dir .          # lance les tests
 | Modèle | Couche | Type | Description |
 |--------|--------|------|-------------|
 | `stg_transactions` | Staging | View | Nettoyage & typage des transactions brutes |
-| `mart_customer_kpis` | Marts | Table | KPIs agrégés par client |
+| `mart_customer_kpis` | Marts | Table | KPIs agrégés par client (taux succès, top catégorie, montants) |
 | `mart_daily_kpis` | Marts | Table | KPIs agrégés par jour & catégorie |
+
+### Datasets BigQuery
+
+| Dataset | Environnement | Alimenté par |
+|---------|---------------|--------------|
+| `raw` | Tous | Script ingestion Python |
+| `dev_finance_staging` | Dev | DBT target dev |
+| `dev_finance_marts` | Dev | DBT target dev |
+| `prod_finance` | Prod | GitHub Actions (branche main) |
 
 ---
 
 ## 🧪 Tests DBT intégrés
 
 - `unique` et `not_null` sur toutes les clés primaires
-- `accepted_values` sur `status` (SUCCESS / FAILED / PENDING)
-- `accepted_values` sur `category` (SHOPPING / TRANSFER / FOOD / WITHDRAWAL)
-
----
-
-## 🔄 Pipeline Jenkins
-
-| Étape | Action |
-|-------|--------|
-| Checkout | Récupération du code |
-| Install | Installation des dépendances Python & DBT |
-| Ingestion | Upload CSV → GCS → BigQuery |
-| DBT Debug | Vérification connexion BigQuery |
-| DBT Source Tests | Tests sur les données sources |
-| DBT Run | Exécution staging + marts |
-| DBT Model Tests | Tests qualité sur les modèles |
-| Deploy Prod | Deploy sur `prod` (branche `main` uniquement) |
-
----
-
-## 📈 Dashboard Looker Studio
-
-Connecter Looker Studio aux tables BigQuery :
-- `prod_finance.mart_customer_kpis` → Scorecard clients, classement
-- `prod_finance.mart_daily_kpis` → Graphiques de tendances, répartition par catégorie
+- `accepted_values` sur `status` : SUCCESS / FAILED / PENDING
+- `accepted_values` sur `category` : SHOPPING / TRANSFER / FOOD / WITHDRAWAL
+- 17 tests au total — 15 PASS validés en CI/CD ✅
 
 ---
 
 ## 🛠️ Stack Technique
 
-`Python` · `Google Cloud Storage` · `BigQuery` · `DBT` · `Jenkins` · `Looker Studio` · `GCP` · `SQL` · `CI/CD`
+| Catégorie | Technologies |
+|-----------|-------------|
+| Cloud | Google Cloud Platform (GCP) |
+| Stockage | Google Cloud Storage (GCS) |
+| Data Warehouse | BigQuery |
+| Transformation | DBT (Data Build Tool) |
+| Langage | Python 3.12, SQL |
+| CI/CD | GitHub Actions |
+| Visualisation | Looker Studio |
 
 ---
 
 ## 👤 Auteur
 
-**Vincent Dognon** — Data Engineer | GCP Certified × 3  
-vince.dognon@gmail.com | [LinkedIn](https://linkedin.com/in/vincent-dognon)
-
-## 🚀 CI/CD via GitHub Actions
+**Vincent Dognon** — Data Engineer&IA | 3× Google Cloud Certified
+vince.dognon@gmail.com | [LinkedIn](https://linkedin.com/in/vincent-dognon) | [GitHub](https://github.com/dognonvi)

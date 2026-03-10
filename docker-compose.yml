@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.yml — Finance Data Pipeline
+# Orchestration locale : ingestion + dbt
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: '3.9'
+
+services:
+
+  # ── SERVICE 1 : Ingestion CSV → GCS → BigQuery ─────────────────────────────
+  ingestion:
+    build:
+      context: .
+      target: final
+    container_name: finance-ingestion
+    command: python ingestion/upload_to_gcs_bq.py
+    env_file:
+      - .env
+    volumes:
+      # Monter le service account pour l'auth GCP
+      - ./service-account.json:/app/service-account.json:ro
+    networks:
+      - pipeline-network
+
+  # ── SERVICE 2 : DBT Run DEV ─────────────────────────────────────────────────
+  dbt-run-dev:
+    build:
+      context: .
+      target: final
+    container_name: finance-dbt-dev
+    command: >
+      bash -c "cd dbt_project &&
+               dbt run --profiles-dir . --target dev &&
+               dbt test --profiles-dir . --target dev"
+    env_file:
+      - .env
+    volumes:
+      - ./service-account.json:/app/service-account.json:ro
+      - ./dbt_project/target:/app/dbt_project/target   # persist dbt artifacts
+    depends_on:
+      - ingestion
+    networks:
+      - pipeline-network
+
+  # ── SERVICE 3 : DBT Run PROD ────────────────────────────────────────────────
+  dbt-run-prod:
+    build:
+      context: .
+      target: final
+    container_name: finance-dbt-prod
+    command: >
+      bash -c "cd dbt_project &&
+               dbt run --profiles-dir . --target prod &&
+               dbt test --profiles-dir . --target prod"
+    env_file:
+      - .env
+    volumes:
+      - ./service-account.json:/app/service-account.json:ro
+    depends_on:
+      - dbt-run-dev
+    networks:
+      - pipeline-network
+    profiles:
+      - prod    # lancé uniquement avec --profile prod
+
+# ── NETWORK ──────────────────────────────────────────────────────────────────
+networks:
+  pipeline-network:
+    driver: bridge

@@ -16,3 +16,10 @@ service-account*.json
 
 # OS
 .DS_Store
+
+# terraform
+**/.terraform/*
+echo "terraform/.terraform/" >> .gitignore
+echo "terraform/terraform.tfvars" >> .gitignore
+echo "terraform/*.tfstate" >> .gitignore
+echo "terraform/*.tfstate.backup" >> .gitignore

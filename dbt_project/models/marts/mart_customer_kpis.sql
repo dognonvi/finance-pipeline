@@ -6,7 +6,7 @@ with transactions as (
 
 ),
 
--- Catégorie favorite par client via ARRAY_AGG (compatible BigQuery)
+-- Catégorie rtfavorite par client via ARRAY_AGG (compatible BigQuery)
 top_category as (
 
     select

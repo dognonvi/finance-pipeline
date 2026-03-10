@@ -1,0 +1,98 @@
+steps:
+
+  # ── ETAPE 1 : Installation des dépendances ──────────────────────────────────
+  - name: 'python:3.12'
+    id: 'install-dependencies'
+    entrypoint: 'pip'
+    args: ['install', '-r', 'requirements.txt', '--user']
+
+  # ── ETAPE 2 : Ingestion CSV → GCS → BigQuery ────────────────────────────────
+  - name: 'python:3.12'
+    id: 'ingestion'
+    entrypoint: 'python'
+    args: ['ingestion/upload_to_gcs_bq.py']
+    env:
+      - 'GCP_PROJECT_ID=$PROJECT_ID'
+      - 'GCS_BUCKET=${_GCS_BUCKET}'
+    waitFor: ['install-dependencies']
+
+  # ── ETAPE 3 : DBT Debug (vérification connexion BigQuery) ───────────────────
+  - name: 'python:3.12'
+    id: 'dbt-debug'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install dbt-bigquery --user
+        cd dbt_project
+        dbt debug --profiles-dir .
+    env:
+      - 'GCP_PROJECT_ID=$PROJECT_ID'
+    waitFor: ['ingestion']
+
+  # ── ETAPE 4 : DBT Run DEV ────────────────────────────────────────────────────
+  - name: 'python:3.12'
+    id: 'dbt-run-dev'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install dbt-bigquery --user
+        cd dbt_project
+        dbt run --profiles-dir . --target dev
+    env:
+      - 'GCP_PROJECT_ID=$PROJECT_ID'
+    waitFor: ['dbt-debug']
+
+  # ── ETAPE 5 : DBT Test DEV ───────────────────────────────────────────────────
+  - name: 'python:3.12'
+    id: 'dbt-test-dev'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install dbt-bigquery --user
+        cd dbt_project
+        dbt test --profiles-dir . --target dev
+    env:
+      - 'GCP_PROJECT_ID=$PROJECT_ID'
+    waitFor: ['dbt-run-dev']
+
+  # ── ETAPE 6 : DBT Run PROD (branche main uniquement) ────────────────────────
+  - name: 'python:3.12'
+    id: 'dbt-run-prod'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install dbt-bigquery --user
+        cd dbt_project
+        dbt run --profiles-dir . --target prod
+    env:
+      - 'GCP_PROJECT_ID=$PROJECT_ID'
+    waitFor: ['dbt-test-dev']
+
+  # ── ETAPE 7 : DBT Test PROD ──────────────────────────────────────────────────
+  - name: 'python:3.12'
+    id: 'dbt-test-prod'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install dbt-bigquery --user
+        cd dbt_project
+        dbt test --profiles-dir . --target prod
+    env:
+      - 'GCP_PROJECT_ID=$PROJECT_ID'
+    waitFor: ['dbt-run-prod']
+
+# ── SUBSTITUTIONS (variables personnalisables) ──────────────────────────────
+substitutions:
+  _GCS_BUCKET: 'finance-pipeline-raw'    # remplacer par ton bucket
+
+# ── OPTIONS ─────────────────────────────────────────────────────────────────
+options:
+  logging: CLOUD_LOGGING_ONLY           # logs dans Cloud Logging GCP
+
+# ── TIMEOUT GLOBAL ───────────────────────────────────────────────────────────
+timeout: '1200s'                         # 20 minutes max
